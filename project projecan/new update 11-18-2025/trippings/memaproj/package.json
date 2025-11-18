@@ -1,0 +1,15 @@
+{
+  "name": "memaproj-updates",
+  "version": "1.0.0",
+  "description": "Small scheduler to send weekly update emails for memaproj users",
+  "main": "send_weekly_updates.js",
+  "scripts": {
+    "start": "node send_weekly_updates.js",
+    "send-once": "node send_weekly_updates.js --once"
+  },
+  "dependencies": {
+    "dotenv": "^16.0.0",
+    "node-cron": "^3.0.2",
+    "nodemailer": "^6.9.3"
+  }
+}

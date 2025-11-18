@@ -1,0 +1,1931 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Expense & Income Tracker — Local</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- SheetJS for Excel export -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <!-- jsPDF for PDF export -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+  <style>
+    /* (kept visually consistent with your original theme; added small utility classes) */
+    * { box-sizing: border-box; margin:0; padding:0; font-family:'Inter',sans-serif; }
+    :root{
+      --bg: radial-gradient(1200px 400px at 10% 10%, rgba(99,102,241,0.08), transparent), #f7fafc;
+      --page-bg:#f7fafc; --card-bg:#fff; --muted:#64748b; --text:#0f172a;
+      --primary:#2563eb; --success:#10b981; --danger:#ef4444; --surface-border: rgba(37,99,235,0.06);
+      /* surface / gradient variables to make light/dark consistent */
+      --header-text: #fff;
+      --card-grad-start: #fff;
+      --card-grad-end: #fbfdff;
+      --danger-surface: rgba(239,68,68,0.08);
+    }
+    body{ background:var(--bg); background-color:var(--page-bg); color:var(--text); padding:18px; }
+    /* top header spans the page and has generous padding */
+    header{ width:calc(100% - 36px); max-width:unset; margin:0 18px 24px; background:linear-gradient(90deg,#4f46e5,#2563eb); color:var(--header-text); padding:14px 22px; border-radius:18px; font-weight:700; display:flex; align-items:center; gap:12px; justify-content:space-between; box-shadow:0 8px 30px rgba(37,99,235,0.12); }
+    /* main content uses the full page with a compact left card and wide right area */
+    .main-wrap{ max-width:unset; width:100%; margin:0; display:flex; gap:36px; align-items:flex-start; padding:0 40px; }
+    .card{ background:var(--card-bg); border-radius:12px; padding:18px; box-shadow:0 12px 30px rgba(2,6,23,0.06); border:1px solid var(--surface-border); width:100%; }
+    .sidebar{ width:300px; flex:0 0 300px; }
+    .hidden{ display:none !important; }
+    .btn{ padding:8px 12px; border-radius:8px; border:none; cursor:pointer; font-weight:600; }
+    .btn-primary{ background:var(--primary); color:#fff; }
+    .btn-success{ background:var(--success); color:#fff; }
+    .btn-danger{ background:var(--danger); color:#fff; }
+    .muted{ color:var(--muted); font-size:13px; }
+    input, select, textarea{ width:100%; padding:10px; border-radius:8px; border:1px solid var(--surface-border); margin-bottom:10px; }
+    .summary-grid{ display:flex; gap:12px; margin-bottom:12px; }
+    .summary-item{ flex:1; padding:12px; border-radius:10px; background:linear-gradient(180deg,var(--card-grad-start),var(--card-grad-end)); text-align:center; }
+    .tx-card{ border-radius:8px; padding:10px; display:flex; justify-content:space-between; gap:10px; align-items:center; border:1px solid var(--surface-border); background:var(--card-bg); }
+    .tag{ padding:6px 8px; border-radius:999px; color:#fff; font-weight:700; font-size:12px; display:inline-block; }
+    .top-controls{ display:flex; gap:8px; align-items:center; margin-bottom:10px; flex-wrap:wrap; }
+    .small{ font-size:13px; padding:6px 8px; border-radius:8px; }
+    .table{ width:100%; border-collapse:collapse; }
+    .table th, .table td{ padding:8px; text-align:left; border-bottom:1px solid #f1f5f9; }
+    .flex{ display:flex; gap:8px; align-items:center; }
+    .center{ text-align:center; }
+    .modal-backdrop{ position:fixed; inset:0; background:rgba(2,6,23,0.45); display:flex; align-items:center; justify-content:center; z-index:9999; }
+    .modal{ width:720px; max-width:95%; background:var(--card-bg); border-radius:12px; padding:18px; }
+    .search{ padding:8px 12px; border-radius:999px; border:1px solid var(--surface-border); }
+    .auth-divider{ text-align:center; margin:16px 0 12px; color:var(--muted); font-size:13px; position:relative; }
+    .auth-divider::before{ content:''; position:absolute; left:0; top:50%; width:100%; height:1px; background:var(--surface-border); }
+    .auth-divider span{ position:relative; background:var(--card-bg); padding:0 8px; }
+    .register-link{ color:var(--primary); text-decoration:none; font-weight:600; cursor:pointer; }
+    .register-link:hover{ text-decoration:underline; }
+    .input-group{ margin-bottom:12px; }
+    .input-group label{ display:block; margin-bottom:6px; font-weight:500; color:var(--text); font-size:13px; }
+    .input-group input{ margin-bottom:0; }
+    /* responsive */
+    /* Navigation Styles */
+    /* compact left navigation card */
+    .nav-sidebar{ width:360px; flex:0 0 360px; background:linear-gradient(180deg,var(--card-grad-start),var(--card-grad-end)); border-radius:14px; padding:0; box-shadow:0 18px 40px rgba(2,6,23,0.08); border:1px solid var(--surface-border); display:flex; flex-direction:column; height:fit-content; position:relative; top:20px; margin-left:18px; }
+    .nav-header{ padding:22px 20px; border-bottom:1px solid var(--surface-border); }
+    .nav-user{ display:flex; align-items:center; gap:12px; margin-bottom:0; }
+    .nav-avatar{ width:58px; height:58px; border-radius:50%; background:linear-gradient(135deg,#4f46e5,#2563eb); color:#fff; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:20px; }
+    .nav-user-info{ flex:1; }
+    .nav-user-name{ font-weight:600; font-size:14px; color:var(--text); }
+    .nav-user-role{ font-size:12px; color:var(--muted); }
+    .nav-items{ flex:1; padding:12px 8px; display:flex; flex-direction:column; gap:4px; }
+    #userNavItems, #adminNavItems{ display:flex; flex-direction:column; gap:4px; }
+    .nav-item{ padding:12px 14px; border-radius:8px; cursor:pointer; font-size:14px; font-weight:500; display:flex; align-items:center; gap:10px; color:var(--text); text-decoration:none; transition:all 0.2s; border:1px solid transparent; }
+    .nav-item:hover{ background:rgba(37,99,235,0.05); border-color:var(--surface-border); }
+    .nav-item.active{ background:linear-gradient(90deg,rgba(37,99,235,0.1),transparent); color:var(--primary); border-color:var(--primary); font-weight:600; }
+    .nav-item-icon{ width:20px; height:20px; display:flex; align-items:center; justify-content:center; font-size:16px; }
+    .nav-divider{ height:1px; background:var(--surface-border); margin:8px 0; }
+    .nav-footer{ padding:12px 8px; border-top:1px solid var(--surface-border); }
+    .nav-logout{ padding:12px 14px; border-radius:8px; background:#fef2f2; color:var(--danger); border:1px solid rgba(239,68,68,0.2); font-weight:500; cursor:pointer; text-align:center; transition:all 0.2s; width:100%; border:none; }
+    .nav-logout:hover{ background:#fee2e2; }
+    /* Dark Mode */
+    body.dark-mode{ --bg:radial-gradient(1200px 400px at 10% 10%, rgba(99,102,241,0.08), transparent), #0f172a; --page-bg:#0f172a; --card-bg:#1e293b; --text:#f1f5f9; --muted:#94a3b8; --surface-border:rgba(148,163,184,0.1); --header-text:#fff; --card-grad-start:#1f2937; --card-grad-end:#0f172a; --danger-surface: rgba(239,68,68,0.12); }
+    body.dark-mode .tx-card{ background:#1e293b; border-color:#334155; }
+    body.dark-mode .summary-item{ background:linear-gradient(180deg,#1e293b,#0f172a); }
+    body.dark-mode .modal{ background:#1e293b; color:var(--text); }
+    body.dark-mode input, body.dark-mode select, body.dark-mode textarea{ background:#0f172a; color:var(--text); border-color:var(--surface-border); }
+    .settings-group{ margin-bottom:20px; }
+    .settings-group h4{ margin-bottom:10px; font-weight:600; color:var(--text); }
+    .settings-option{ display:flex; align-items:center; justify-content:space-between; padding:12px 0; border-bottom:1px solid var(--surface-border); }
+    .settings-option:last-child{ border-bottom:none; }
+    .toggle-switch{ width:48px; height:28px; background:var(--muted); border-radius:999px; cursor:pointer; position:relative; transition:background 0.3s; }
+    .toggle-switch.active{ background:var(--primary); }
+    .toggle-switch::after{ content:''; position:absolute; width:24px; height:24px; background:#fff; border-radius:50%; top:2px; left:2px; transition:left 0.3s; }
+    .toggle-switch.active::after{ left:22px; }
+    .splash-screen{ display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:500px; text-align:center; padding:40px 20px; }
+    .splash-icon{ font-size:64px; margin-bottom:20px; }
+    .splash-title{ font-size:28px; font-weight:700; margin-bottom:10px; color:var(--text); }
+    .splash-subtitle{ font-size:16px; color:var(--muted); margin-bottom:30px; }
+    .content-section{ display:block; opacity:0; transform:translateY(8px); transition:opacity .32s ease, transform .32s ease; height:0; overflow:hidden; }
+    .content-section.active{ opacity:1; transform:none; height:auto; }
+    /* Center auth card when logged out (applies to main container or the sidebar as fallback) */
+    .auth-centered{ width:100%; min-height:calc(100vh - 120px); display:flex; justify-content:center; align-items:center; transition:all .36s ease; }
+    .auth-centered .card{ max-width:420px; width:100%; transform:translateY(0); transition:transform .4s cubic-bezier(.2,.9,.2,1), opacity .28s ease; }
+    aside.auth-centered{ display:flex; justify-content:center; align-items:center; min-height:calc(100vh - 120px); }
+    /* small animation for nav items */
+    .nav-item{ transition:background .18s ease, color .18s ease, transform .18s ease; }
+    .nav-item.active{ transform:translateX(4px); }
+    /* Welcome pane shown to the right of the login card when logged out */
+    .welcome-pane{ flex:1; display:flex; align-items:center; justify-content:center; padding:36px; }
+    .welcome-hero{ max-width:680px; color:var(--text); text-align:left; }
+    .welcome-title{ font-size:44px; line-height:1; font-weight:900; margin-bottom:12px; }
+    .welcome-sub{ color:var(--muted); font-size:16px; margin-bottom:20px; }
+    .welcome-features{ display:flex; gap:12px; flex-wrap:wrap; }
+    .feature{ background:linear-gradient(180deg,var(--card-grad-start),var(--card-grad-end)); padding:12px 14px; border-radius:12px; border:1px solid var(--surface-border); min-width:180px; }
+    body.dark-mode .welcome-hero{ color:var(--text); }
+    body.dark-mode .feature{ background:linear-gradient(180deg,#1f2937,#111827); border-color:rgba(255,255,255,0.04); }
+    /* Team / About cards */
+    .team-card{ background:linear-gradient(180deg,var(--card-grad-start),var(--card-grad-end)); border-radius:12px; }
+    .team-card img{ border-radius:12px; display:block; margin:0 auto 14px; width:220px; height:220px; object-fit:cover; }
+    .team-card .muted{ color:var(--muted); }
+    body.dark-mode .team-card{ background: linear-gradient(180deg,#1f2937,#0f172a); border:1px solid rgba(255,255,255,0.04); }
+    body.dark-mode .team-card .muted{ color:var(--muted); }
+    @media(max-width:1000px){ .main-wrap{ flex-direction:column; } .sidebar{ width:100%; flex:unset; } .nav-sidebar{ width:100%; flex:unset; position:sticky; top:0; } }
+  </style>
+</head>
+<body>
+
+<header>
+  <div>💰 Expense & Income Tracker — Local</div>
+  <div style="display:flex;gap:8px;align-items:center">
+    <div id="currentUserInfo" class="muted">Not signed in</div>
+    <button id="logoutBtn" class="btn btn-danger hidden">Logout</button>
+  </div>
+</header>
+
+<div class="main-wrap">
+  <!-- LEFT: NAVIGATION SIDEBAR (when logged in) -->
+  <nav id="navSidebar" class="nav-sidebar hidden">
+    <div class="nav-header">
+      <div class="nav-user">
+        <div class="nav-avatar" id="navAvatar">U</div>
+        <div class="nav-user-info">
+          <div class="nav-user-name" id="navUsername">User</div>
+          <div class="nav-user-role">Local Tracker</div>
+        </div>
+      </div>
+    </div>
+    <div class="nav-items">
+      <!-- Common items for all users -->
+      <a class="nav-item active" id="navHome" onclick="switchSection('home')">
+        <div class="nav-item-icon">🏠</div>
+        <span>Home</span>
+      </a>
+      
+      <!-- Regular user items (hidden for admin) -->
+      <div id="userNavItems">
+        <a class="nav-item" id="navTransactions" onclick="switchSection('transactions')">
+          <div class="nav-item-icon">📊</div>
+          <span>Transactions</span>
+        </a>
+        <a class="nav-item" id="navAbout" onclick="switchSection('about')">
+          <div class="nav-item-icon">🧑‍🤝‍🧑</div>
+          <span>About Us</span>
+        </a>
+      </div>
+      
+      <!-- Admin items (hidden for regular users) -->
+      <div id="adminNavItems" class="hidden">
+        <a class="nav-item" id="navDataMgmt" onclick="switchSection('adminDataMgmt')">
+          <div class="nav-item-icon">📈</div>
+          <span>Data Management</span>
+        </a>
+      </div>
+
+      <!-- Profile (all users) -->
+      <a class="nav-item" id="navProfile" onclick="switchSection('profile')">
+        <div class="nav-item-icon">👤</div>
+        <span>Profile</span>
+      </a>
+      
+      <!-- Settings (all users) -->
+      <a class="nav-item" id="navSettings" onclick="switchSection('settings')">
+        <div class="nav-item-icon">⚙️</div>
+        <span>Settings</span>
+      </a>
+    </div>
+    <div class="nav-footer">
+      <button id="navLogout" class="nav-logout">Logout</button>
+    </div>
+  </nav>
+
+  <!-- LEFT: SIDEBAR (Auth / Admin) -->
+  <aside id="authSidebar" class="sidebar">
+    <div id="authCard" class="card">
+      <h3 id="authTitle" style="margin-bottom:16px;">Login</h3>
+      <div class="input-group">
+        <label for="username">Username</label>
+        <input id="username" placeholder="Enter your username" />
+      </div>
+      <div class="input-group">
+        <label for="password">Password</label>
+        <input id="password" type="password" placeholder="Enter your password" />
+      </div>
+      <div class="input-group" id="emailGroup" style="display:none">
+        <label for="email">Email</label>
+        <input id="email" type="email" placeholder="Enter your email (for updates)" />
+      </div>
+      <div class="input-group" id="fullnameGroup" style="display:none">
+        <label for="fullname">Full name</label>
+        <input id="fullname" placeholder="Enter your full name" />
+      </div>
+      <div class="input-group" id="occupationGroup" style="display:none">
+        <label for="occupation">Occupation</label>
+        <input id="occupation" placeholder="e.g. Designer, Developer, Student" />
+      </div>
+      <div class="input-group" id="countryGroup" style="display:none">
+        <label for="country">Country</label>
+        <input id="country" placeholder="e.g. Philippines" />
+      </div>
+      <div class="input-group" id="languageGroup" style="display:none">
+        <label for="language">Primary language</label>
+        <input id="language" placeholder="e.g. English" />
+      </div>
+      <div class="input-group" id="notifyGroup" style="display:none">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+          <input type="checkbox" id="notifyUpdates" />
+          <span>Receive weekly updates</span>
+        </label>
+      </div>
+      <!-- phone, birthdate, timezone, and preferred currency inputs removed -->
+      <label style="display:flex;gap:8px;align-items:center;margin-bottom:16px;cursor:pointer;">
+        <input id="rememberMe" type="checkbox"/> 
+        <span style="font-size:14px;">Remember me</span>
+      </label>
+      <div style="display:flex;gap:8px;margin-bottom:12px">
+        <button id="authBtn" class="btn btn-primary" style="flex:1;">Login</button>
+        <button id="guestBtn" class="btn btn-success">Guest</button>
+      </div>
+      <div class="auth-divider"><span>or</span></div>
+      <div style="text-align:center;padding:12px 0;">
+        <div class="muted" style="font-size:13px;margin-bottom:8px;">Don't have an account?</div>
+        <a href="#" id="toggleRegister" class="register-link">Create one now</a>
+      </div>
+    </div>
+
+    <!-- Admin Panel -->
+    <div id="adminPanel" class="card hidden" style="margin-top:12px;">
+      <h3>Admin Panel</h3>
+      <div class="muted">Manage users & global data</div>
+      <div style="margin-top:10px;">
+        <label>Search users</label>
+        <input id="adminSearchUser" placeholder="username" />
+      </div>
+      <div style="margin-top:8px; max-height:260px; overflow:auto;" id="adminUserList"></div>
+      <hr style="margin:12px 0"/>
+      <div>
+        <button id="exportAllCSV" class="small">Export ALL CSV</button>
+        <button id="exportAllExcel" class="small">Export ALL Excel</button>
+        <button id="exportEmails" class="small">Export Emails</button>
+      </div>
+    </div>
+  </aside>
+
+  <!-- MAIN -->
+  <main style="flex:1;">
+    <!-- WELCOME PANE (right side of login when logged out) -->
+    <div id="welcomePane" class="welcome-pane hidden">
+      <div class="welcome-hero">
+        <div class="welcome-title">Welcome to Expense & Income Tracker</div>
+        <div class="welcome-sub">Simple, local-first tracking for your incomes and expenses — fast, private, and offline-friendly.</div>
+        <div class="welcome-features">
+          <div class="feature">Real-time charts & analytics</div>
+          <div class="feature">Local-only storage (no servers)</div>
+          <div class="feature">Export CSV / Excel / PDF</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- HOME SECTION (Splash Screen for regular users, Admin Dashboard for admin) -->
+    <div id="homeSection" class="content-section active">
+      <!-- Regular User Home (Splash Screen) -->
+      <div id="userHomeContent" class="card">
+        <div class="splash-screen">
+          <div class="splash-icon">💰</div>
+          <div class="splash-title">Welcome to Expense Tracker</div>
+          <div class="splash-subtitle">Track your income and expenses efficiently</div>
+          <p class="muted" style="max-width:400px;">Click on "Transactions" in the sidebar to view your dashboard, analytics, and manage your financial data.</p>
+        </div>
+        <!-- Mini charts removed: Home now shows only the welcome splash -->
+        </div>
+
+      <!-- Admin Home (User Management Dashboard) -->
+      <div id="adminHomeContent" class="hidden" style="display:flex;flex-direction:column;gap:20px;">
+        <div class="card">
+          <div style="margin-bottom:0;">
+            <h2 style="margin-bottom:6px;">Welcome to Admin Dashboard</h2>
+            <div class="muted">Manage users, view system statistics, and oversee all financial data.</div>
+          </div>
+        </div>
+
+        <!-- Admin Summary Stats -->
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;">
+          <div class="card" style="text-align:center;padding:20px;">
+            <div class="muted" style="font-size:12px;margin-bottom:8px;">Total Users</div>
+            <div style="font-size:32px;font-weight:700;" id="adminTotalUsersHome">—</div>
+          </div>
+          <div class="card" style="text-align:center;padding:20px;">
+            <div class="muted" style="font-size:12px;margin-bottom:8px;">Total Transactions</div>
+            <div style="font-size:32px;font-weight:700;" id="adminTotalTxHome">—</div>
+          </div>
+          <div class="card" style="text-align:center;padding:20px;">
+            <div class="muted" style="font-size:12px;margin-bottom:8px;">Total Income</div>
+            <div style="font-size:32px;font-weight:700;color:var(--success);" id="adminTotalIncomeHome">—</div>
+          </div>
+          <div class="card" style="text-align:center;padding:20px;">
+            <div class="muted" style="font-size:12px;margin-bottom:8px;">Total Expenses</div>
+            <div style="font-size:32px;font-weight:700;color:var(--danger);" id="adminTotalExpenseHome">—</div>
+          </div>
+        </div>
+
+        <!-- Users Management Card -->
+        <div class="card">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
+            <div>
+              <h3 style="margin-bottom:6px;">Users Management</h3>
+              <div class="muted">View, create, edit, and manage all user accounts.</div>
+            </div>
+            <button class="btn btn-primary" onclick="openCreateUserModal()">+ New User</button>
+          </div>
+          
+          <div style="display:flex;gap:12px;margin-bottom:16px;">
+            <input id="adminSearchUsersInput" class="search" placeholder="Search users..." style="flex:1;" />
+            <button class="btn small" onclick="loadAdminUsersList()">Refresh</button>
+          </div>
+          
+          <div id="adminUsersListContainer" style="display:flex;flex-direction:column;gap:8px;max-height:700px;overflow:auto;">
+            <!-- dynamically populated -->
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TRANSACTIONS SECTION (Dashboard) -->
+    <div id="transactionsSection" class="content-section">
+    <div id="dashboardCard" class="card">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap">
+        <div style="flex:1;min-width:240px">
+          <h2>Dashboard</h2>
+          <div class="muted">Overview & quick actions</div>
+          <div style="display:flex;gap:10px;margin-top:12px;flex-wrap:wrap">
+            <div style="background:linear-gradient(180deg,var(--card-grad-start),var(--card-grad-end));padding:10px;border-radius:10px;border:1px solid var(--surface-border);min-width:140px">
+              <div class="muted" style="font-size:12px">Monthly Expense Change</div>
+              <div id="kpiMonthlyChange" style="font-weight:700;font-size:16px">—</div>
+            </div>
+            <div style="background:linear-gradient(180deg,var(--card-grad-start),var(--card-grad-end));padding:10px;border-radius:10px;border:1px solid var(--surface-border);min-width:140px">
+              <div class="muted" style="font-size:12px">Avg Daily Expense</div>
+              <div id="kpiAvgExpense" style="font-weight:700;font-size:16px">—</div>
+            </div>
+            <div style="background:linear-gradient(180deg,var(--card-grad-start),var(--card-grad-end));padding:10px;border-radius:10px;border:1px solid var(--surface-border);min-width:140px">
+              <div class="muted" style="font-size:12px">Top Category</div>
+              <div id="kpiTopCategory" style="font-weight:700;font-size:16px">—</div>
+            </div>
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <button id="openAddExpense" class="btn btn-primary">+ Expense</button>
+          <button id="openAddIncome" class="btn btn-success">+ Income</button>
+          <button id="openFilters" class="btn small">Filters</button>
+          <button id="exportCSV" class="btn small">Export CSV</button>
+          <button id="exportExcel" class="btn small">Export Excel</button>
+          <button id="exportPDF" class="btn small">Export PDF</button>
+        </div>
+      </div>
+
+      <div class="summary-grid" style="margin-top:12px">
+        <div class="summary-item">
+          <div class="muted">Total Income</div>
+          <div id="totalIncome" style="font-size:20px;font-weight:700">₱0.00</div>
+        </div>
+        <div class="summary-item">
+          <div class="muted">Total Expense</div>
+          <div id="totalExpense" style="font-size:20px;font-weight:700">₱0.00</div>
+        </div>
+        <div class="summary-item">
+          <div class="muted">Remaining</div>
+          <div id="remaining" style="font-size:20px;font-weight:700">₱0.00</div>
+        </div>
+      </div>
+
+      <!-- controls: search / category filter / date -->
+      <div class="top-controls" style="margin-top:12px">
+        <input id="searchInput" class="search" placeholder="Search description, source, category..." />
+        <select id="filterCategory" style="width:180px;">
+          <option value="">All categories</option>
+        </select>
+        <input type="month" id="filterMonth" class="small" />
+        <button id="clearFilters" class="small">Clear</button>
+      </div>
+
+      <div style="display:flex;gap:18px;flex-wrap:wrap">
+        <!-- Left: Chart -->
+        <div style="flex:1;min-width:320px">
+          <div style="margin-bottom:6px"><strong>Spending by Category</strong></div>
+          <canvas id="categoryChart" style="max-height:320px"></canvas>
+        </div>
+
+        <!-- Right: Monthly chart -->
+        <div style="flex:1;min-width:320px">
+          <div style="margin-bottom:6px"><strong>Income vs Expense (Monthly)</strong></div>
+          <canvas id="monthlyChart" style="max-height:320px"></canvas>
+        </div>
+      </div>
+
+      <div style="margin-top:12px">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <h3>Recent Transactions <span id="txnCount" class="muted">(0)</span></h3>
+          <div style="display:flex;gap:8px;align-items:center">
+            <label class="muted">Sort</label>
+            <select id="sortBy" class="small">
+              <option value="date_desc">Date desc</option>
+              <option value="date_asc">Date asc</option>
+              <option value="amount_desc">Amount desc</option>
+              <option value="amount_asc">Amount asc</option>
+            </select>
+          </div>
+        </div>
+
+        <div id="transactionList" style="margin-top:8px; display:flex;flex-direction:column;gap:8px;"></div>
+      </div>
+
+    </div>
+    </div>
+    <!-- END TRANSACTIONS SECTION -->
+
+    <!-- PROFILE SECTION -->
+    <div id="profileSection" class="content-section">
+      <div class="card">
+        <h2 style="margin-bottom:20px;">Profile</h2>
+        <div style="display:flex;gap:20px;align-items:flex-start;flex-wrap:wrap;">
+          <div style="flex:1;min-width:250px;">
+            <div class="settings-group">
+              <h4>User Information</h4>
+              <div style="padding:20px;background:rgba(37,99,235,0.05);border-radius:8px;border:1px solid var(--surface-border);">
+                <div style="margin-bottom:12px;">
+                  <div class="muted" style="font-size:12px;margin-bottom:4px;">Username</div>
+                  <div id="profileUsername" style="font-weight:600;font-size:16px;">—</div>
+                </div>
+                <div style="margin-bottom:12px;">
+                  <div class="muted" style="font-size:12px;margin-bottom:4px;">Account Type</div>
+                  <div id="profileRole" style="font-weight:600;font-size:16px;">—</div>
+                </div>
+                <div>
+                  <div class="muted" style="font-size:12px;margin-bottom:4px;">Member Since</div>
+                  <div id="profileDate" style="font-weight:600;font-size:16px;">—</div>
+                </div>
+                <hr style="margin:12px 0" />
+                <div style="margin-top:8px;">
+                  <div class="muted" style="font-size:12px;margin-bottom:4px;">Full name</div>
+                  <div id="profileFullName" style="font-weight:600;font-size:14px;">—</div>
+                </div>
+                <div style="margin-top:8px;">
+                  <div class="muted" style="font-size:12px;margin-bottom:4px;">Email</div>
+                  <div id="profileEmail" style="font-weight:600;font-size:14px;">—</div>
+                </div>
+                <div style="margin-top:8px;">
+                  <div class="muted" style="font-size:12px;margin-bottom:4px;">Occupation</div>
+                  <div id="profileOccupation" style="font-weight:600;font-size:14px;">—</div>
+                </div>
+                <div style="margin-top:8px;">
+                  <div class="muted" style="font-size:12px;margin-bottom:4px;">Country</div>
+                  <div id="profileCountry" style="font-weight:600;font-size:14px;">—</div>
+                </div>
+                <div style="margin-top:8px;">
+                  <div class="muted" style="font-size:12px;margin-bottom:4px;">Primary language</div>
+                  <div id="profileLanguage" style="font-weight:600;font-size:14px;">—</div>
+                </div>
+                <div style="margin-top:8px;">
+                  <div class="muted" style="font-size:12px;margin-bottom:4px;">Weekly updates</div>
+                  <div id="profileNotify" style="font-weight:600;font-size:14px;">—</div>
+                </div>
+                <!-- phone/birth/timezone/currency removed from profile display -->
+              </div>
+            </div>
+          </div>
+          <div style="flex:1;min-width:250px;">
+            <div class="settings-group">
+              <h4>Statistics</h4>
+              <div style="padding:20px;background:rgba(37,99,235,0.05);border-radius:8px;border:1px solid var(--surface-border);">
+                <div style="margin-bottom:12px;">
+                  <div class="muted" style="font-size:12px;margin-bottom:4px;">Total Transactions</div>
+                  <div id="profileTxCount" style="font-weight:600;font-size:24px;">0</div>
+                </div>
+                <div>
+                  <div class="muted" style="font-size:12px;margin-bottom:4px;">Current Balance</div>
+                  <div id="profileBalance" style="font-weight:600;font-size:24px;color:var(--success);">₱0.00</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SETTINGS SECTION -->
+    <div id="settingsSection" class="content-section">
+      <div class="card">
+        <h2 style="margin-bottom:20px;">Settings</h2>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:30px;">
+          <div>
+            <div class="settings-group">
+              <h4>Appearance</h4>
+              <div class="settings-option">
+                <div>
+                  <div style="font-weight:500;">Dark Mode</div>
+                  <div class="muted" style="font-size:12px;">Enable dark theme</div>
+                </div>
+                <div class="toggle-switch" id="darkModeToggle"></div>
+              </div>
+            </div>
+          </div>
+          <div>
+            <div class="settings-group">
+              <h4>Data Management</h4>
+              <div style="display:flex;flex-direction:column;gap:8px;">
+                <button class="btn btn-primary" style="width:100%;text-align:center;" onclick="exportUserData()">Export My Data</button>
+                <button class="btn" style="width:100%;text-align:center;" onclick="downloadAllData()">Download CSV</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    </div>
+
+    <!-- ABOUT SECTION (Highlighted Team) -->
+    <div id="aboutSection" class="content-section">
+      <div class="card">
+        <div style="text-align:center;margin-bottom:18px;">
+          <h2 style="margin:0 0 8px 0;">About Us</h2>
+          <div class="muted">Meet the team behind this tracker — the people who built and designed the experience.</div>
+        </div>
+
+        <div style="display:flex;gap:28px;flex-wrap:wrap;justify-content:center;align-items:flex-start;padding-top:8px;">
+          <!-- Developer (highlight) -->
+          <div class="team-card" style="flex:0 0 420px;max-width:420px;text-align:center;padding:18px;border-radius:12px;border:1px solid var(--surface-border);">
+            <img src="images/developer.jpg" alt="Developer" />
+            <div style="font-size:20px;font-weight:800;">Kwort Pogi</div>
+            <div class="muted" style="font-size:13px;margin-bottom:12px;">Lead Developer</div>
+            <p class="muted" style="font-size:14px;line-height:1.4;">Main System Developer, backbone developer. My pronouns are if/else. Focusing mainly on system development and database integration. misskona.</p>
+          </div>
+
+          <!-- System Analyst (highlight) -->
+          <div class="team-card" style="flex:0 0 420px;max-width:420px;text-align:center;padding:18px;border-radius:12px;border:1px solid var(--surface-border);">
+            <img src="images/analyst.jpg" alt="System Analyst" />
+            <div style="font-size:20px;font-weight:800;">Ralph Bryan</div>
+            <div class="muted" style="font-size:13px;margin-bottom:12px;">System Analyst / Product</div>
+            <p class="muted" style="font-size:14px;line-height:1.4;">Focused on translating requirements into clear specifications and ensuring the product solves user needs.</p>
+          </div>
+        </div>
+
+        <div style="margin-top:20px;text-align:center;" class="muted">Pakicontact nalang si Ralph Bryan, naghahanap ng ea yan.</div>
+      </div>
+    </div>
+
+    <!-- ADMIN: USERS MANAGEMENT SECTION (kept for backward compatibility, but hidden) -->
+    <div id="adminUsersSection" class="content-section hidden">
+      <!-- Content moved to home page for admin users -->
+    </div>
+
+    <!-- ADMIN: DATA MANAGEMENT SECTION -->
+    <div id="adminDataMgmtSection" class="content-section">
+      <div class="card">
+        <h2 style="margin-bottom:20px;">Data Management</h2>
+        <div class="muted" style="margin-bottom:20px;">View income and expense summary for all users.</div>
+        
+        <div style="display:flex;gap:28px;margin-bottom:28px;flex-wrap:wrap;">
+          <div style="flex:1;min-width:200px;">
+            <div class="muted" style="font-size:12px;margin-bottom:4px;">Total Users</div>
+            <div id="adminTotalUsers" style="font-weight:700;font-size:28px;">0</div>
+          </div>
+          <div style="flex:1;min-width:200px;">
+            <div class="muted" style="font-size:12px;margin-bottom:4px;">Total Transactions</div>
+            <div id="adminTotalTx" style="font-weight:700;font-size:28px;">0</div>
+          </div>
+          <div style="flex:1;min-width:200px;">
+            <div class="muted" style="font-size:12px;margin-bottom:4px;">Aggregate Income</div>
+            <div id="adminTotalIncome" style="font-weight:700;font-size:28px;color:var(--success);">₱0.00</div>
+          </div>
+          <div style="flex:1;min-width:200px;">
+            <div class="muted" style="font-size:12px;margin-bottom:4px;">Aggregate Expense</div>
+            <div id="adminTotalExpense" style="font-weight:700;font-size:28px;color:var(--danger);">₱0.00</div>
+          </div>
+        </div>
+        
+        <div style="margin-bottom:12px;"><strong>Income vs Expense (All Users)</strong></div>
+        <canvas id="adminWaveChart" style="max-height:400px;margin-bottom:20px;"></canvas>
+        
+        <div style="margin-top:20px;">
+          <button class="btn btn-primary" onclick="exportAllUsersData()">Export All Data (CSV)</button>
+        </div>
+      </div>
+    </div>
+
+
+<!-- MODALS (simple) -->
+<div id="modalRoot" class="hidden"></div>
+
+<script>
+/* =========================
+   LocalStorage shape
+   users = {
+     username: { password, isAdmin:false, data: { incomes:[], expenses:[] } }
+   }
+   ========================= */
+
+///// UTILS /////
+const $ = (id)=>document.getElementById(id);
+const currency = v => '₱' + Number(v||0).toFixed(2);
+const uid = ()=>Date.now() + Math.floor(Math.random()*999);
+const todayMonthStr = (() => { const d=new Date(); return d.toISOString().slice(0,7); })();
+
+/* Category color mapping (persistent in localStorage) */
+const DEFAULT_CATEGORY_COLORS = {
+  Food:'#ef4444', Transport:'#f59e0b', Bills:'#6366f1', Entertainment:'#8b5cf6',
+  Drinks:'#06b6d4', Liquor:'#ec4899', Other:'#475569', Salary:'#10b981'
+};
+
+function loadCategoryColors(){
+  const stored = JSON.parse(localStorage.getItem('cat_colors') || '{}');
+  return Object.assign({}, DEFAULT_CATEGORY_COLORS, stored);
+}
+function saveCategoryColors(map){
+  localStorage.setItem('cat_colors', JSON.stringify(map));
+}
+let CATEGORY_COLORS = loadCategoryColors();
+
+function colorForCategory(cat){
+  if (!cat) return '#94a3b8';
+  if (!CATEGORY_COLORS[cat]) {
+    // generate pleasant color
+    const palette = ['#6366f1','#06b6d4','#10b981','#f59e0b','#ef4444','#8b5cf6','#ec4899','#14b8a6','#fb7185','#f97316','#7c3aed','#0ea5e9'];
+    CATEGORY_COLORS[cat] = palette[Object.keys(CATEGORY_COLORS).length % palette.length];
+    saveCategoryColors(CATEGORY_COLORS);
+  }
+  return CATEGORY_COLORS[cat];
+}
+
+/* seed users */
+(function init(){
+  const users = JSON.parse(localStorage.getItem('users') || '{}');
+  if (!users['admin']) {
+    users['admin'] = { password:'adminkupal123', isAdmin:true, email:'admin@example.com', fullName:'Admin', occupation:'Administrator', country:'', language:'English', notifyUpdates:true, data:{ incomes:[], expenses:[] } };
+  }
+  if (!users['kupal']) {
+    users['kupal'] = { password:'asdasd123', isAdmin:false, email:'ralph@example.com', fullName:'Ralph Bryan', occupation:'Product Analyst', country:'Philippines', language:'English', notifyUpdates:false, data:{ incomes:[], expenses:[] } };
+  }
+  // Seed two additional admin accounts requested by user
+  if (!users['Admin_ralph']) {
+    users['Admin_ralph'] = { password:'adminralph123', isAdmin:true, email:'ralph.admin@example.com', fullName:'Admin Ralph', occupation:'Administrator', country:'Philippines', language:'English', notifyUpdates:true, data:{ incomes:[], expenses:[] } };
+  }
+  if (!users['Admin_kwort']) {
+    users['Admin_kwort'] = { password:'adminkwort123', isAdmin:true, email:'kwort.admin@example.com', fullName:'Admin Kwort', occupation:'Administrator', country:'Philippines', language:'English', notifyUpdates:true, data:{ incomes:[], expenses:[] } };
+  }
+  localStorage.setItem('users', JSON.stringify(users));
+})();
+
+/* Authentication */
+let currentUser = localStorage.getItem('currentUser') || sessionStorage.getItem('currentUser') || null;
+let isRegisterMode = false;
+let currentSection = 'home';
+
+/* Navigation Functions */
+function switchSection(section) {
+  currentSection = section;
+  document.querySelectorAll('.content-section').forEach(el => el.classList.remove('active'));
+  const secEl = $(section + 'Section');
+  if (secEl) secEl.classList.add('active');
+  document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+  const navId = 'nav' + section.charAt(0).toUpperCase() + section.slice(1);
+  const navEl = $(navId);
+  if (navEl) navEl.classList.add('active');
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+  // load data when opening sections
+  if (section === 'home') {
+    updateHomeSection();
+  } else if (section === 'transactions') {
+    loadUserDataAndRender();
+  } else if (section === 'profile') {
+    updateProfileSection();
+  } else if (section === 'adminUsers') {
+    loadAdminUsersList();
+  } else if (section === 'adminDataMgmt') {
+    updateAdminDataMgmt();
+  }
+}
+
+/* Dark Mode Functions */
+function initDarkMode() {
+  const darkModeEnabled = localStorage.getItem('darkMode') === 'true';
+  if (darkModeEnabled) {
+    document.body.classList.add('dark-mode');
+    const toggle = $('darkModeToggle');
+    if (toggle) toggle.classList.add('active');
+  }
+}
+
+function toggleDarkMode() {
+  document.body.classList.toggle('dark-mode');
+  const isDarkMode = document.body.classList.contains('dark-mode');
+  localStorage.setItem('darkMode', isDarkMode);
+  const toggle = $('darkModeToggle');
+  if (toggle) toggle.classList.toggle('active', isDarkMode);
+}
+function updateProfileSection() {
+  if (!currentUser) return;
+  const users = JSON.parse(localStorage.getItem('users') || '{}');
+  const data = users[currentUser].data || { incomes: [], expenses: [] };
+  
+  $('profileUsername').textContent = currentUser;
+  $('profileRole').textContent = isAdmin(currentUser) ? 'Admin' : 'User';
+  $('profileDate').textContent = 'Today';
+  
+  const totalTx = (data.incomes || []).length + (data.expenses || []).length;
+  $('profileTxCount').textContent = totalTx;
+  
+  const income = (data.incomes || []).reduce((s, i) => s + Number(i.amount || 0), 0);
+  const expense = (data.expenses || []).reduce((s, e) => s + Number(e.amount || 0), 0);
+  const balance = income - expense;
+  $('profileBalance').textContent = currency(balance);
+  // show new profile fields if present
+  const u = users[currentUser] || {};
+  const occ = $('profileOccupation'); if (occ) occ.textContent = u.occupation || '—';
+  const ctry = $('profileCountry'); if (ctry) ctry.textContent = u.country || '—';
+  const lang = $('profileLanguage'); if (lang) lang.textContent = u.language || '—';
+  const notify = $('profileNotify'); if (notify) notify.textContent = (u.notifyUpdates ? 'Yes' : 'No');
+}
+
+function updateHomeSection() {
+  if (!currentUser) return;
+  const isAdminUser = isAdmin(currentUser);
+  const userHomeContent = $('userHomeContent');
+  const adminHomeContent = $('adminHomeContent');
+  
+  if (isAdminUser) {
+    // Show admin dashboard
+    if (userHomeContent) userHomeContent.classList.add('hidden');
+    if (adminHomeContent) adminHomeContent.classList.remove('hidden');
+    // Load admin stats
+    loadAdminHomeStats();
+    loadAdminUsersList();
+  } else {
+    // Show regular user splash
+    if (userHomeContent) userHomeContent.classList.remove('hidden');
+    if (adminHomeContent) adminHomeContent.classList.add('hidden');
+    // render user home charts
+    renderHomeCharts();
+  }
+}
+
+function loadAdminHomeStats() {
+  if (!currentUser || !isAdmin(currentUser)) return;
+  const users = getUsers();
+  const usernames = Object.keys(users);
+  let totalIncome = 0, totalExpense = 0, totalTx = 0;
+  
+  usernames.forEach(u => {
+    const data = users[u].data || { incomes: [], expenses: [] };
+    const inc = (data.incomes || []).reduce((s, i) => s + Number(i.amount || 0), 0);
+    const exp = (data.expenses || []).reduce((s, e) => s + Number(e.amount || 0), 0);
+    totalIncome += inc;
+    totalExpense += exp;
+    totalTx += (data.incomes || []).length + (data.expenses || []).length;
+  });
+  
+  $('adminTotalUsersHome').textContent = usernames.length;
+  $('adminTotalTxHome').textContent = totalTx;
+  $('adminTotalIncomeHome').textContent = currency(totalIncome);
+  $('adminTotalExpenseHome').textContent = currency(totalExpense);
+}
+
+const authTitle = $('authTitle'), authBtn = $('authBtn'), toggleRegister = $('toggleRegister'), guestBtn = $('guestBtn'), logoutBtnEl = $('logoutBtn');
+
+function updateUIForAuth(){
+  if (currentUser) {
+    $('currentUserInfo').textContent = currentUser + (isAdmin(currentUser)? ' (admin)':'');
+    $('authSidebar').classList.add('hidden');
+    $('authSidebar').classList.remove('auth-centered');
+    // hide welcome pane when logged in
+    const wp = $('welcomePane'); if (wp) wp.classList.add('hidden');
+    $('navSidebar').classList.remove('hidden');
+    $('navUsername').textContent = currentUser;
+    $('navAvatar').textContent = currentUser.charAt(0).toUpperCase();
+    logoutBtnEl.classList.remove('hidden');
+    // toggle admin/regular nav items
+    const isAdminUser = isAdmin(currentUser);
+    $('userNavItems').classList.toggle('hidden', isAdminUser);
+    $('adminNavItems').classList.toggle('hidden', !isAdminUser);
+    if (isAdminUser) {
+      $('adminPanel').classList.remove('hidden');
+    } else {
+      $('adminPanel').classList.add('hidden');
+      loadUserDataAndRender();
+    }
+    updateProfileSection();
+    currentSection = 'home';
+    switchSection('home');
+  } else {
+    $('currentUserInfo').textContent = 'Not signed in';
+    // hide all content sections so nothing remains visible when logged out
+    document.querySelectorAll('.content-section').forEach(el => el.classList.remove('active'));
+    // hide any open modals
+    const modalRoot = $('modalRoot'); if (modalRoot) { modalRoot.classList.add('hidden'); modalRoot.innerHTML = ''; }
+    $('authSidebar').classList.remove('hidden');
+    // center the auth card in the main area
+    $('authSidebar').classList.add('auth-centered');
+    // show welcome pane on the right
+    const wp = $('welcomePane'); if (wp) wp.classList.remove('hidden');
+    $('navSidebar').classList.add('hidden');
+    $('adminPanel').classList.add('hidden');
+    logoutBtnEl.classList.add('hidden');
+    // reset nav active states
+    document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  }
+}
+function isAdmin(u){
+  const users = JSON.parse(localStorage.getItem('users')||'{}');
+  return users[u] && users[u].isAdmin;
+}
+
+updateUIForAuth();
+
+/* Auth actions */
+$('authBtn').addEventListener('click', ()=>{
+  const uname = $('username').value.trim();
+  const pwd = $('password').value.trim();
+  if (!uname || !pwd) return alert('Fill username and password.');
+  const users = JSON.parse(localStorage.getItem('users')||'{}');
+  
+  if (isRegisterMode) {
+    // Register mode
+    if (users[uname]) return alert('User already exists.');
+    const emailVal = ($('email') && $('email').value.trim()) || '';
+    const fullNameVal = ($('fullname') && $('fullname').value.trim()) || '';
+    const occupationVal = ($('occupation') && $('occupation').value.trim()) || '';
+    const countryVal = ($('country') && $('country').value.trim()) || '';
+    const languageVal = ($('language') && $('language').value.trim()) || '';
+    const notifyVal = ($('notifyUpdates') && $('notifyUpdates').checked) || false;
+    users[uname] = { password: pwd, isAdmin:false, email: emailVal, fullName: fullNameVal, occupation: occupationVal, country: countryVal, language: languageVal, notifyUpdates: notifyVal, data:{ incomes:[], expenses:[] } };
+    localStorage.setItem('users', JSON.stringify(users));
+    alert('Account created successfully! Please login.');
+    toggleRegisterMode();
+  } else {
+    // Login mode
+    if (!users[uname]) return alert('User not found.');
+    if (users[uname].password !== pwd) return alert('Invalid credentials.');
+    const remember = $('rememberMe').checked;
+    if (remember) localStorage.setItem('currentUser', uname);
+    else sessionStorage.setItem('currentUser', uname);
+    currentUser = uname;
+    $('username').value=''; $('password').value=''; $('rememberMe').checked=false;
+    updateUIForAuth();
+  }
+});
+
+function toggleRegisterMode(){
+  isRegisterMode = !isRegisterMode;
+  if (isRegisterMode) {
+    authTitle.textContent = 'Create Account';
+    authBtn.textContent = 'Register';
+    toggleRegister.textContent = 'Back to login';
+    $('rememberMe').parentElement.style.display = 'none';
+    const eg = $('emailGroup'); if (eg) eg.style.display = 'block';
+    const fg = $('fullnameGroup'); if (fg) fg.style.display = 'block';
+    const og = $('occupationGroup'); if (og) og.style.display = 'block';
+    const cg = $('countryGroup'); if (cg) cg.style.display = 'block';
+    const lg = $('languageGroup'); if (lg) lg.style.display = 'block';
+    const ng = $('notifyGroup'); if (ng) ng.style.display = 'block';
+  } else {
+    authTitle.textContent = 'Login';
+    authBtn.textContent = 'Login';
+    toggleRegister.textContent = 'Create one now';
+    $('rememberMe').parentElement.style.display = 'flex';
+    const eg = $('emailGroup'); if (eg) eg.style.display = 'none';
+    const fg = $('fullnameGroup'); if (fg) fg.style.display = 'none';
+    const og = $('occupationGroup'); if (og) og.style.display = 'none';
+    const cg = $('countryGroup'); if (cg) cg.style.display = 'none';
+    const lg = $('languageGroup'); if (lg) lg.style.display = 'none';
+    const ng = $('notifyGroup'); if (ng) ng.style.display = 'none';
+  }
+}
+
+$('toggleRegister').addEventListener('click', (e)=>{
+  e.preventDefault();
+  toggleRegisterMode();
+});
+
+/* guest */
+$('guestBtn').addEventListener('click', ()=>{
+  const uname = 'guest_' + uid();
+  const users = JSON.parse(localStorage.getItem('users')||'{}');
+  users[uname] = { password:'', isAdmin:false, data:{ incomes:[], expenses:[] } };
+  localStorage.setItem('users', JSON.stringify(users));
+  sessionStorage.setItem('currentUser', uname);
+  currentUser = uname;
+  updateUIForAuth();
+});
+
+/* logout */
+logoutBtnEl.addEventListener('click', ()=>{
+  localStorage.removeItem('currentUser'); sessionStorage.removeItem('currentUser'); currentUser = null;
+  updateUIForAuth();
+});
+
+/* nav logout */
+$('navLogout').addEventListener('click', ()=>{
+  localStorage.removeItem('currentUser'); sessionStorage.removeItem('currentUser'); currentUser = null;
+  updateUIForAuth();
+});
+
+/* dark mode toggle */
+$('darkModeToggle').addEventListener('click', toggleDarkMode);
+
+/* Initialize dark mode on page load */
+initDarkMode();
+
+/* ========== ADMIN FUNCTIONS ========== */
+let adminWaveChart = null;
+
+function loadAdminUsersList() {
+  if (!currentUser || !isAdmin(currentUser)) return;
+  const users = getUsers();
+  const searchTerm = ($('adminSearchUsersInput').value || '').toLowerCase();
+  const container = $('adminUsersListContainer');
+  container.innerHTML = '';
+  
+  const usernames = Object.keys(users).sort();
+  if (usernames.length === 0) {
+    container.innerHTML = '<div class="muted" style="text-align:center;padding:40px;">No users found.</div>';
+    return;
+  }
+  
+  usernames.forEach(username => {
+    if (!username.toLowerCase().includes(searchTerm)) return;
+    const user = users[username];
+    const isUserAdmin = user.isAdmin;
+    const txCount = ((user.data?.incomes || []).length + (user.data?.expenses || []).length);
+    
+    const el = document.createElement('div');
+    el.style.cssText = 'display:flex;justify-content:space-between;align-items:center;padding:14px;background:linear-gradient(180deg,var(--card-grad-start),var(--card-grad-end));border-radius:8px;border:1px solid var(--surface-border);';
+    el.innerHTML = `
+      <div>
+        <div style="font-weight:600;font-size:15px;">${username}</div>
+        <div class="muted" style="font-size:12px;">${isUserAdmin ? '👤 Admin' : '👤 User'} • ${txCount} transactions • ${user.email || 'no email'}</div>
+      </div>
+    `;
+    const actions = document.createElement('div');
+    actions.style.cssText = 'display:flex;gap:6px;align-items:center;';
+    
+    const editBtn = document.createElement('button');
+    editBtn.className = 'small btn btn-primary';
+    editBtn.textContent = '✏️ Edit';
+    editBtn.style.padding = '6px 10px';
+    editBtn.onclick = () => openEditUserModal(username);
+    
+    const pwdBtn = document.createElement('button');
+    pwdBtn.className = 'small btn';
+    pwdBtn.textContent = '🔑 Password';
+    pwdBtn.style.cssText = 'padding:6px 10px;background:#8b5cf6;color:#fff;border:none;border-radius:6px;cursor:pointer;';
+    pwdBtn.onclick = () => openChangePasswordModal(username);
+    
+    const delBtn = document.createElement('button');
+    delBtn.className = 'small btn btn-danger';
+    delBtn.textContent = '🗑️ Delete';
+    delBtn.style.padding = '6px 10px';
+    delBtn.onclick = () => { 
+      if (confirm('Delete user "' + username + '"? All their data will be permanently lost.')) { 
+        delete users[username]; 
+        saveUsers(users); 
+        loadAdminUsersList(); 
+      } 
+    };
+    
+    actions.appendChild(editBtn);
+    actions.appendChild(pwdBtn);
+    actions.appendChild(delBtn);
+    el.appendChild(actions);
+    container.appendChild(el);
+  });
+}
+
+function openCreateUserModal() {
+  if (!currentUser || !isAdmin(currentUser)) return;
+  const html = `
+    <h3 style="margin-bottom:16px;">Create New User</h3>
+    <div class="input-group">
+      <label for="newUsername">Username</label>
+      <input id="newUsername" placeholder="Enter username" />
+    </div>
+    <div class="input-group">
+      <label for="newPassword">Password</label>
+      <input id="newPassword" type="password" placeholder="Enter password" />
+    </div>
+    <div class="input-group">
+      <label for="newPasswordConfirm">Confirm Password</label>
+      <input id="newPasswordConfirm" type="password" placeholder="Confirm password" />
+    </div>
+    <div class="input-group">
+      <label for="newEmail">Email</label>
+      <input id="newEmail" type="email" placeholder="user@example.com" />
+    </div>
+    <div class="input-group">
+      <label for="newFullName">Full name</label>
+      <input id="newFullName" placeholder="Full name" />
+    </div>
+    <div class="input-group">
+      <label for="newOccupation">Occupation</label>
+      <input id="newOccupation" placeholder="e.g. Developer" />
+    </div>
+    <div class="input-group">
+      <label for="newCountry">Country</label>
+      <input id="newCountry" placeholder="e.g. Philippines" />
+    </div>
+    <div class="input-group">
+      <label for="newLanguage">Primary language</label>
+      <input id="newLanguage" placeholder="e.g. English" />
+    </div>
+    <div class="input-group">
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+        <input type="checkbox" id="newNotify" />
+        <span>Receive weekly updates</span>
+      </label>
+    </div>
+    <!-- phone/birth/timezone/currency inputs removed from create-user modal -->
+    <div style="margin-bottom:12px;">
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+        <input type="checkbox" id="newUserIsAdmin" />
+        <span>Make this user an Admin</span>
+      </label>
+    </div>
+    <div style="display:flex;gap:8px;">
+      <button class="btn btn-primary" onclick="saveNewUser()" style="flex:1;">Create User</button>
+      <button class="btn small" onclick="closeModal()" style="flex:1;">Cancel</button>
+    </div>
+  `;
+  showModal(html);
+}
+
+function saveNewUser() {
+  const username = $('newUsername').value.trim();
+  const password = $('newPassword').value.trim();
+  const passwordConfirm = $('newPasswordConfirm').value.trim();
+  const isAdminCheck = $('newUserIsAdmin').checked;
+  const newEmail = ($('newEmail') && $('newEmail').value.trim()) || '';
+  const newFullName = ($('newFullName') && $('newFullName').value.trim()) || '';
+  const newOccupation = ($('newOccupation') && $('newOccupation').value.trim()) || '';
+  const newCountry = ($('newCountry') && $('newCountry').value.trim()) || '';
+  const newLanguage = ($('newLanguage') && $('newLanguage').value.trim()) || '';
+  const newNotify = ($('newNotify') && $('newNotify').checked) || false;
+  
+  if (!username) return alert('Please enter a username.');
+  if (!password) return alert('Please enter a password.');
+  if (password !== passwordConfirm) return alert('Passwords do not match.');
+  if (password.length < 3) return alert('Password must be at least 3 characters.');
+  
+  const users = getUsers();
+  if (users[username]) return alert('Username already exists.');
+  
+  users[username] = {
+    password: password,
+    isAdmin: isAdminCheck,
+    email: newEmail,
+    fullName: newFullName,
+    occupation: newOccupation,
+    country: newCountry,
+    language: newLanguage,
+    notifyUpdates: newNotify,
+    data: { incomes: [], expenses: [] }
+  };
+  
+  saveUsers(users);
+  alert('User "' + username + '" created successfully!');
+  closeModal();
+  loadAdminUsersList();
+}
+
+function openEditUserModal(username) {
+  if (!currentUser || !isAdmin(currentUser)) return;
+  const users = getUsers();
+  const user = users[username];
+  if (!user) return alert('User not found.');
+  
+  const isUserAdmin = user.isAdmin;
+  const html = `
+    <h3 style="margin-bottom:16px;">Edit User: ${username}</h3>
+    <div class="input-group">
+      <label>Username</label>
+      <input value="${username}" disabled style="background:rgba(0,0,0,0.05);cursor:not-allowed;" />
+      <div class="muted" style="font-size:12px;margin-top:4px;">Usernames cannot be changed.</div>
+    </div>
+    <div style="margin-bottom:12px;">
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+        <input type="checkbox" id="editUserIsAdmin" ${isUserAdmin ? 'checked' : ''} />
+        <span>Admin Privileges</span>
+      </label>
+      <div class="muted" style="font-size:12px;margin-top:4px;">Enable or disable admin access for this user.</div>
+    </div>
+    <div class="input-group">
+      <label>Email</label>
+      <input id="editEmail" value="${user.email || ''}" />
+    </div>
+    <div class="input-group">
+      <label>Full name</label>
+      <input id="editFullName" value="${(user.fullName||'').replaceAll('\"','&quot;')}" />
+    </div>
+    <div class="input-group">
+      <label>Occupation</label>
+      <input id="editOccupation" value="${user.occupation || ''}" />
+    </div>
+    <div class="input-group">
+      <label>Country</label>
+      <input id="editCountry" value="${user.country || ''}" />
+    </div>
+    <div class="input-group">
+      <label>Primary language</label>
+      <input id="editLanguage" value="${user.language || ''}" />
+    </div>
+    <div class="input-group">
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+        <input type="checkbox" id="editNotify" ${user.notifyUpdates ? 'checked' : ''} />
+        <span>Receive weekly updates</span>
+      </label>
+    </div>
+    <!-- removed editable phone/birth/timezone/currency fields from edit modal -->
+    <div style="display:flex;gap:8px;">
+      <button class="btn btn-primary" onclick="saveEditUser('${username}')" style="flex:1;">Save Changes</button>
+      <button class="btn small" onclick="closeModal()" style="flex:1;">Cancel</button>
+    </div>
+  `;
+  showModal(html);
+}
+
+function saveEditUser(username) {
+  const users = getUsers();
+  const user = users[username];
+  if (!user) return alert('User not found.');
+  
+  const newIsAdmin = $('editUserIsAdmin').checked;
+  user.isAdmin = newIsAdmin;
+  // save editable profile fields
+  user.email = ($('editEmail') && $('editEmail').value.trim()) || '';
+  user.fullName = ($('editFullName') && $('editFullName').value.trim()) || '';
+  user.occupation = ($('editOccupation') && $('editOccupation').value.trim()) || '';
+  user.country = ($('editCountry') && $('editCountry').value.trim()) || '';
+  user.language = ($('editLanguage') && $('editLanguage').value.trim()) || '';
+  user.notifyUpdates = ($('editNotify') && $('editNotify').checked) || false;
+  
+  saveUsers(users);
+  alert('User "' + username + '" updated successfully!');
+  closeModal();
+  loadAdminUsersList();
+}
+
+function openChangePasswordModal(username) {
+  if (!currentUser || !isAdmin(currentUser)) return;
+  const users = getUsers();
+  const user = users[username];
+  if (!user) return alert('User not found.');
+  
+  const html = `
+    <h3 style="margin-bottom:16px;">Change Password: ${username}</h3>
+    <div class="input-group">
+      <label for="changePwd">New Password</label>
+      <input id="changePwd" type="password" placeholder="Enter new password" />
+    </div>
+    <div class="input-group">
+      <label for="changePwdConfirm">Confirm Password</label>
+      <input id="changePwdConfirm" type="password" placeholder="Confirm password" />
+    </div>
+    <div class="muted" style="margin-bottom:12px;font-size:12px;">⚠️ The user will need to use the new password to log in.</div>
+    <div style="display:flex;gap:8px;">
+      <button class="btn btn-primary" onclick="saveChangePassword('${username}')" style="flex:1;">Change Password</button>
+      <button class="btn small" onclick="closeModal()" style="flex:1;">Cancel</button>
+    </div>
+  `;
+  showModal(html);
+}
+
+function saveChangePassword(username) {
+  const password = $('changePwd').value.trim();
+  const passwordConfirm = $('changePwdConfirm').value.trim();
+  
+  if (!password) return alert('Please enter a new password.');
+  if (password !== passwordConfirm) return alert('Passwords do not match.');
+  if (password.length < 3) return alert('Password must be at least 3 characters.');
+  
+  const users = getUsers();
+  const user = users[username];
+  if (!user) return alert('User not found.');
+  
+  user.password = password;
+  saveUsers(users);
+  alert('Password for "' + username + '" changed successfully!');
+  closeModal();
+}
+
+function showModal(html) {
+  const backdrop = document.createElement('div');
+  backdrop.className = 'modal-backdrop';
+  backdrop.id = 'userModalBackdrop';
+  backdrop.onclick = (e) => { if (e.target === backdrop) closeModal(); };
+  
+  const modal = document.createElement('div');
+  modal.className = 'modal';
+  modal.innerHTML = html;
+  
+  backdrop.appendChild(modal);
+  document.body.appendChild(backdrop);
+}
+
+function closeModal() {
+  const backdrop = $('userModalBackdrop');
+  if (backdrop) backdrop.remove();
+}
+
+function updateAdminDataMgmt() {
+  if (!currentUser || !isAdmin(currentUser)) return;
+  const users = getUsers();
+  const usernames = Object.keys(users);
+  let totalIncome = 0, totalExpense = 0, totalTx = 0;
+  
+  // aggregate all users' data
+  usernames.forEach(u => {
+    const data = users[u].data || { incomes: [], expenses: [] };
+    const inc = (data.incomes || []).reduce((s, i) => s + Number(i.amount || 0), 0);
+    const exp = (data.expenses || []).reduce((s, e) => s + Number(e.amount || 0), 0);
+    totalIncome += inc;
+    totalExpense += exp;
+    totalTx += (data.incomes || []).length + (data.expenses || []).length;
+  });
+  
+  $('adminTotalUsers').textContent = usernames.length;
+  $('adminTotalTx').textContent = totalTx;
+  $('adminTotalIncome').textContent = currency(totalIncome);
+  $('adminTotalExpense').textContent = currency(totalExpense);
+  
+  // render wave chart: monthly income vs expense for all users
+  const months = [];
+  const mMap = {};
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date(); d.setMonth(d.getMonth() - i);
+    const key = d.toISOString().slice(0, 7);
+    months.push(key);
+    mMap[key] = { income: 0, expense: 0 };
+  }
+  
+  // aggregate all users' transactions by month
+  usernames.forEach(u => {
+    const data = users[u].data || { incomes: [], expenses: [] };
+    (data.incomes || []).forEach(i => {
+      const k = (new Date(i.date)).toISOString().slice(0, 7);
+      if (mMap[k]) mMap[k].income += Number(i.amount || 0);
+    });
+    (data.expenses || []).forEach(e => {
+      const k = (new Date(e.date)).toISOString().slice(0, 7);
+      if (mMap[k]) mMap[k].expense += Number(e.amount || 0);
+    });
+  });
+  
+  const incomes = months.map(m => mMap[m].income);
+  const expenses = months.map(m => mMap[m].expense);
+  
+  const ctx = $('adminWaveChart');
+  if (!ctx) return;
+  
+  if (adminWaveChart) {
+    adminWaveChart.data.labels = months;
+    adminWaveChart.data.datasets[0].data = incomes;
+    adminWaveChart.data.datasets[1].data = expenses;
+    adminWaveChart.update();
+  } else {
+    adminWaveChart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: months,
+        datasets: [
+          { label: 'Income', data: incomes, borderColor: '#10b981', backgroundColor: 'rgba(16,185,129,0.1)', tension: 0.4, fill: true },
+          { label: 'Expense', data: expenses, borderColor: '#ef4444', backgroundColor: 'rgba(239,68,68,0.1)', tension: 0.4, fill: true }
+        ]
+      },
+      options: { responsive: true, plugins: { legend: { position: 'top' } }, scales: { y: { beginAtZero: true } } }
+    });
+  }
+}
+
+function exportAllUsersData() {
+  if (!currentUser || !isAdmin(currentUser)) return alert('Admin only');
+  const users = getUsers();
+  const rows = [['user', 'type', 'id', 'title', 'category_or_source', 'amount', 'date']];
+  Object.keys(users).forEach(u => {
+    const data = users[u].data || { incomes: [], expenses: [] };
+    (data.incomes || []).forEach(i => rows.push([u, 'Income', i.id, i.source, '-', i.amount, i.date]));
+    (data.expenses || []).forEach(e => rows.push([u, 'Expense', e.id, e.description, e.category, e.amount, e.date]));
+  });
+  downloadCSV(rows, 'all_users_transactions.csv');
+}
+
+/* ========== DATA LAYER (localStorage helpers) ========== */
+
+function getUsers(){ return JSON.parse(localStorage.getItem('users')||'{}'); }
+function saveUsers(u){ localStorage.setItem('users', JSON.stringify(u)); }
+
+function getCurrentData(){
+  if (!currentUser) return null;
+  const users = getUsers();
+  return users[currentUser] ? users[currentUser].data : null;
+}
+
+function saveCurrentData(data){
+  if (!currentUser) return;
+  const users = getUsers();
+  users[currentUser].data = data;
+  saveUsers(users);
+}
+
+/* ========== RENDER / CONTROLS ========== */
+
+const transactionListEl = $('transactionList');
+const txnCountEl = $('txnCount');
+const totalIncomeEl = $('totalIncome'), totalExpenseEl = $('totalExpense'), remainingEl = $('remaining');
+const filterCategoryEl = $('filterCategory'), searchInputEl = $('searchInput'), filterMonthEl = $('filterMonth'), sortByEl = $('sortBy');
+
+let CATEGORY_SET = new Set(Object.keys(DEFAULT_CATEGORY_COLORS));
+
+function refreshCategoryOptions(){
+  // merge categories from saved colors and existing transactions
+  const colors = loadCategoryColors();
+  const users = getUsers();
+  Object.values(users).forEach(u=>{
+    (u.data.incomes||[]).forEach(i=>{ if (i.source) CATEGORY_SET.add(i.source); });
+    (u.data.expenses||[]).forEach(e=>{ if (e.category) CATEGORY_SET.add(e.category); });
+  });
+  CATEGORY_SET = new Set([...CATEGORY_SET, ...Object.keys(colors)]);
+  // re-build select options
+  const keys = Array.from(CATEGORY_SET).sort();
+  filterCategoryEl.innerHTML = '<option value="">All categories</option>' + keys.map(k=>`<option value="${k}">${k}</option>`).join('');
+  // also populate as suggestions for adding new category in forms (handled in modal)
+}
+refreshCategoryOptions();
+
+/* CHARTS */
+let categoryChart, monthlyChart;
+let homeDailyChart = null, homeWeeklyChart = null, homeMonthlyChart = null;
+// helper to format a date to YYYY-MM-DD
+function fmtDate(d){ const y = d.getFullYear(); const m = String(d.getMonth()+1).padStart(2,'0'); const dd = String(d.getDate()).padStart(2,'0'); return `${y}-${m}-${dd}`; }
+
+function renderHomeCharts(){
+  if (!currentUser) return;
+  const users = getUsers();
+  const data = users[currentUser].data || { incomes:[], expenses:[] };
+
+  // DAILY (last 7 days)
+  const dailyLabels = [];
+  const dailyInc = {};
+  const dailyExp = {};
+  for (let i=6;i>=0;i--){ const d=new Date(); d.setDate(d.getDate()-i); const key = fmtDate(d); dailyLabels.push(key); dailyInc[key]=0; dailyExp[key]=0; }
+  (data.incomes||[]).forEach(i=>{ const k = fmtDate(new Date(i.date)); if (dailyInc[k]!==undefined) dailyInc[k]+=Number(i.amount||0); });
+  (data.expenses||[]).forEach(e=>{ const k = fmtDate(new Date(e.date)); if (dailyExp[k]!==undefined) dailyExp[k]+=Number(e.amount||0); });
+  const dailyIncArr = dailyLabels.map(l=>dailyInc[l]);
+  const dailyExpArr = dailyLabels.map(l=>dailyExp[l]);
+
+  // WEEKLY (last 8 weeks). We'll take week starting Monday (or locale default) by taking Monday of each week
+  const weeklyLabels = [];
+  const weeklyInc = {};
+  const weeklyExp = {};
+  const now = new Date();
+  // compute Monday of current week
+  function startOfWeek(d){ const dd = new Date(d); const day = dd.getDay(); const diff = (day + 6) % 7; dd.setDate(dd.getDate()-diff); dd.setHours(0,0,0,0); return dd; }
+  let weekStart = startOfWeek(now);
+  for (let w=7; w>=0; w--){ const d = new Date(weekStart); d.setDate(weekStart.getDate() - w*7); const key = fmtDate(d); weeklyLabels.push(key); weeklyInc[key]=0; weeklyExp[key]=0; }
+  (data.incomes||[]).forEach(i=>{ const d = new Date(i.date); const s = startOfWeek(d); const k = fmtDate(s); if (weeklyInc[k]!==undefined) weeklyInc[k]+=Number(i.amount||0); });
+  (data.expenses||[]).forEach(e=>{ const d = new Date(e.date); const s = startOfWeek(d); const k = fmtDate(s); if (weeklyExp[k]!==undefined) weeklyExp[k]+=Number(e.amount||0); });
+  const weeklyIncArr = weeklyLabels.map(l=>weeklyInc[l]);
+  const weeklyExpArr = weeklyLabels.map(l=>weeklyExp[l]);
+
+  // MONTHLY (last 6 months)
+  const months = [];
+  const mMap = {};
+  for (let i = 5; i >= 0; i--) { const d = new Date(); d.setMonth(d.getMonth() - i); const key = d.toISOString().slice(0,7); months.push(key); mMap[key] = { income:0, expense:0 }; }
+  (data.incomes||[]).forEach(i=>{ const k = (new Date(i.date)).toISOString().slice(0,7); if (mMap[k]) mMap[k].income += Number(i.amount||0); });
+  (data.expenses||[]).forEach(e=>{ const k = (new Date(e.date)).toISOString().slice(0,7); if (mMap[k]) mMap[k].expense += Number(e.amount||0); });
+  const monthInc = months.map(m=>mMap[m].income);
+  const monthExp = months.map(m=>mMap[m].expense);
+
+  // Render/Update charts
+  try {
+    const ctxD = $('homeDailyChart');
+    if (ctxD) {
+      if (homeDailyChart) {
+        homeDailyChart.data.labels = dailyLabels;
+        homeDailyChart.data.datasets[0].data = dailyIncArr;
+        homeDailyChart.data.datasets[1].data = dailyExpArr;
+        homeDailyChart.update();
+      } else {
+        homeDailyChart = new Chart(ctxD.getContext('2d'), { type:'bar', data:{ labels: dailyLabels, datasets:[{ label:'Income', data: dailyIncArr, backgroundColor:'#10b981' }, { label:'Expense', data: dailyExpArr, backgroundColor:'#ef4444' }] }, options:{ responsive:true, maintainAspectRatio:false, scales:{ x:{ stacked:true }, y:{ stacked:false } }, plugins:{ legend:{ position:'top' } } } });
+      }
+    }
+
+    const ctxW = $('homeWeeklyChart');
+    if (ctxW) {
+      if (homeWeeklyChart) {
+        homeWeeklyChart.data.labels = weeklyLabels;
+        homeWeeklyChart.data.datasets[0].data = weeklyIncArr;
+        homeWeeklyChart.data.datasets[1].data = weeklyExpArr;
+        homeWeeklyChart.update();
+      } else {
+        homeWeeklyChart = new Chart(ctxW.getContext('2d'), { type:'line', data:{ labels: weeklyLabels, datasets:[{ label:'Income', data: weeklyIncArr, borderColor:'#10b981', backgroundColor:'rgba(16,185,129,0.08)', fill:true, tension:0.3 }, { label:'Expense', data: weeklyExpArr, borderColor:'#ef4444', backgroundColor:'rgba(239,68,68,0.08)', fill:true, tension:0.3 }] }, options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{ position:'top' } }, scales:{ y:{ beginAtZero:true } } } });
+      }
+    }
+
+    const ctxM = $('homeMonthlyChart');
+    if (ctxM) {
+      if (homeMonthlyChart) {
+        homeMonthlyChart.data.labels = months;
+        homeMonthlyChart.data.datasets[0].data = monthInc;
+        homeMonthlyChart.data.datasets[1].data = monthExp;
+        homeMonthlyChart.update();
+      } else {
+        homeMonthlyChart = new Chart(ctxM.getContext('2d'), { type:'bar', data:{ labels: months, datasets:[{ label:'Income', data: monthInc, backgroundColor:'#10b981' }, { label:'Expense', data: monthExp, backgroundColor:'#ef4444' }] }, options:{ responsive:true, maintainAspectRatio:false, scales:{ x:{ stacked:true }, y:{ beginAtZero:true } }, plugins:{ legend:{ position:'top' } } } });
+      }
+    }
+  } catch (e){ console.warn('Home charts render error', e); }
+}
+function updateCharts(filteredData){
+  // category totals
+  const catTotals = {};
+  (filteredData.expenses||[]).forEach(e=>{ catTotals[e.category] = (catTotals[e.category]||0) + Number(e.amount||0); });
+  const catLabels = Object.keys(catTotals);
+  const catValues = catLabels.map(l => catTotals[l]);
+  const catColors = catLabels.map(l => colorForCategory(l));
+
+  if (categoryChart) {
+    categoryChart.data.labels = catLabels;
+    categoryChart.data.datasets[0].data = catValues;
+    categoryChart.data.datasets[0].backgroundColor = catColors;
+    categoryChart.update();
+  } else {
+    const ctx = $('categoryChart').getContext('2d');
+    categoryChart = new Chart(ctx, {
+      type:'pie',
+      data:{ labels:catLabels, datasets:[{ data:catValues, backgroundColor:catColors, borderColor:'#fff', borderWidth:1 }]},
+      options:{ responsive:true }
+    });
+  }
+
+  // monthly income vs expense for last 6 months
+  const months = [];
+  const mMap = {};
+  for (let i=5;i>=0;i--){
+    const d = new Date(); d.setMonth(d.getMonth()-i);
+    const key = d.toISOString().slice(0,7);
+    months.push(key);
+    mMap[key] = { income:0, expense:0 };
+  }
+  (filteredData.incomes||[]).forEach(i=>{ const k = (new Date(i.date)).toISOString().slice(0,7); if (mMap[k]) mMap[k].income += Number(i.amount||0); });
+  (filteredData.expenses||[]).forEach(e=>{ const k = (new Date(e.date)).toISOString().slice(0,7); if (mMap[k]) mMap[k].expense += Number(e.amount||0); });
+  const incomes = months.map(m=>mMap[m].income);
+  const expenses = months.map(m=>mMap[m].expense);
+
+  if (monthlyChart) {
+    monthlyChart.data.labels = months;
+    monthlyChart.data.datasets[0].data = incomes;
+    monthlyChart.data.datasets[1].data = expenses;
+    monthlyChart.update();
+  } else {
+    const ctx2 = $('monthlyChart').getContext('2d');
+    monthlyChart = new Chart(ctx2, {
+      type:'bar',
+      data:{
+        labels:months,
+        datasets:[
+          { label:'Income', data:incomes, backgroundColor:'#10b981' },
+          { label:'Expense', data:expenses, backgroundColor:'#ef4444' }
+        ]
+      },
+      options:{ responsive:true, scales:{ x:{ stacked:false }, y:{ stacked:false } } }
+    });
+  }
+}
+
+/* Render transactions list */
+function renderTransactionsList({incomes=[], expenses=[]}, opts = {}) {
+  const combined = [];
+  incomes.forEach(i=> combined.push(Object.assign({type:'Income'}, i)));
+  expenses.forEach(e=> combined.push(Object.assign({type:'Expense'}, e)));
+  // filters: search, category, month
+  const search = (searchInputEl.value||'').toLowerCase();
+  const catFilter = filterCategoryEl.value;
+  const monthFilter = filterMonthEl.value;
+
+  let filtered = combined.filter(item=>{
+    if (search) {
+      const hay = `${item.description||item.source||''} ${item.category||''}`.toLowerCase();
+      if (!hay.includes(search)) return false;
+    }
+    if (catFilter) {
+      if (item.type === 'Expense' && item.category !== catFilter) return false;
+      if (item.type === 'Income' && (item.source !== catFilter && catFilter !== '')) {
+        // incomes can match source if user uses same category label
+        if (item.source !== catFilter) return false;
+      }
+    }
+    if (monthFilter) {
+      const itemMonth = (new Date(item.date)).toISOString().slice(0,7);
+      if (itemMonth !== monthFilter) return false;
+    }
+    return true;
+  });
+
+  // sorting
+  const sort = sortByEl.value || 'date_desc';
+  filtered.sort((a,b)=>{
+    if (sort === 'date_desc') return new Date(b.date) - new Date(a.date);
+    if (sort === 'date_asc') return new Date(a.date) - new Date(b.date);
+    if (sort === 'amount_desc') return (b.amount||0) - (a.amount||0);
+    if (sort === 'amount_asc') return (a.amount||0) - (b.amount||0);
+    return 0;
+  });
+
+  transactionListEl.innerHTML = '';
+  filtered.slice(0,200).forEach(item=>{
+    const el = document.createElement('div');
+    el.className = 'tx-card';
+    const left = document.createElement('div');
+    left.style.flex='1';
+    const title = item.type === 'Income' ? (item.source||'Income') : (item.description||'Expense');
+    const subtitle = item.type === 'Income' ? new Date(item.date).toLocaleString() : `${item.category||'-'} • ${new Date(item.date).toLocaleString()}`;
+    left.innerHTML = `<div style="font-weight:700">${title}</div><div class="muted" style="font-size:13px">${subtitle}</div>`;
+
+    const right = document.createElement('div');
+    right.className = 'flex';
+    right.style.gap='6px';
+    const tag = document.createElement('div');
+    tag.className = 'tag';
+    const catLabel = item.type === 'Income' ? (item.source||'Income') : (item.category||'Other');
+    tag.textContent = catLabel;
+    tag.style.background = colorForCategory(catLabel);
+
+    const amount = document.createElement('div');
+    amount.style.fontWeight='800';
+    amount.textContent = currency(item.amount || 0);
+
+    const actions = document.createElement('div');
+    actions.style.display='flex';
+    actions.style.gap='6px';
+    const editBtn = document.createElement('button');
+    editBtn.className='small';
+    editBtn.textContent='Edit';
+    editBtn.onclick = ()=>openEditModal(item);
+    const delBtn = document.createElement('button');
+    delBtn.className='small btn-danger';
+    delBtn.textContent='Delete';
+    delBtn.onclick = ()=>{ if (!confirm('Delete this transaction?')) return; deleteTransaction(item); };
+
+    actions.appendChild(editBtn); actions.appendChild(delBtn);
+    right.appendChild(tag); right.appendChild(amount); right.appendChild(actions);
+
+    el.appendChild(left); el.appendChild(right);
+    transactionListEl.appendChild(el);
+  });
+
+  // totals & charts
+  const incTotal = (incomes||[]).reduce((s,i)=>s + Number(i.amount||0), 0);
+  const expTotal = (expenses||[]).reduce((s,e)=>s + Number(e.amount||0), 0);
+  totalIncomeEl.textContent = currency(incTotal);
+  totalExpenseEl.textContent = currency(expTotal);
+  remainingEl.textContent = currency(incTotal - expTotal);
+  txnCountEl.textContent = `(${filtered.length})`;
+  // update KPIs
+  try {
+    const monthKey = (new Date()).toISOString().slice(0,7);
+    const prev = new Date(); prev.setMonth(prev.getMonth()-1);
+    const prevKey = prev.toISOString().slice(0,7);
+    const expCurrent = (expenses||[]).filter(e=> (new Date(e.date)).toISOString().slice(0,7) === monthKey).reduce((s,e)=>s + Number(e.amount||0), 0);
+    const expPrev = (expenses||[]).filter(e=> (new Date(e.date)).toISOString().slice(0,7) === prevKey).reduce((s,e)=>s + Number(e.amount||0), 0);
+    const diff = expCurrent - expPrev;
+    let monthlyChangeText = '';
+    if (expPrev > 0) {
+      const pct = (diff / expPrev) * 100;
+      monthlyChangeText = (pct >= 0 ? '↑' : '↓') + Math.abs(pct).toFixed(1) + '%';
+    } else {
+      monthlyChangeText = (diff >= 0 ? '+' : '') + currency(diff);
+    }
+    const daysPassed = new Date().getDate();
+    const avgDaily = expCurrent / Math.max(1, daysPassed);
+    // top category
+    const catTotals = {};
+    (expenses||[]).forEach(e=>{ const c = e.category || 'Other'; catTotals[c] = (catTotals[c]||0) + Number(e.amount||0); });
+    const topCat = Object.keys(catTotals).length ? Object.entries(catTotals).sort((a,b)=>b[1]-a[1])[0][0] : '—';
+    const kMonth = $('kpiMonthlyChange'); if (kMonth) kMonth.textContent = monthlyChangeText;
+    const kAvg = $('kpiAvgExpense'); if (kAvg) kAvg.textContent = currency(avgDaily);
+    const kTop = $('kpiTopCategory'); if (kTop) kTop.textContent = topCat;
+  } catch (e) { console.warn('KPI calc error', e); }
+
+  updateCharts({ incomes: incomes||[], expenses: expenses||[] });
+}
+
+/* load user's data and render */
+function loadUserDataAndRender(){
+  if (!currentUser) return;
+  const users = getUsers();
+  const data = users[currentUser].data || { incomes:[], expenses:[] };
+  // refresh categories
+  (data.expenses||[]).forEach(e=> { if (e.category) CATEGORY_SET.add(e.category); colorForCategory(e.category); });
+  (data.incomes||[]).forEach(i=> { if (i.source) CATEGORY_SET.add(i.source); colorForCategory(i.source); });
+  refreshCategoryOptions();
+  renderTransactionsList(data);
+  renderAdminUserList(); // only displays for admin
+  // update mini charts on data load
+  renderHomeCharts();
+}
+
+/* delete transaction */
+function deleteTransaction(item){
+  const users = getUsers();
+  if (item.type === 'Income') {
+    users[currentUser].data.incomes = (users[currentUser].data.incomes||[]).filter(i=>i.id !== item.id);
+  } else {
+    users[currentUser].data.expenses = (users[currentUser].data.expenses||[]).filter(e=>e.id !== item.id);
+  }
+  saveUsers(users);
+  loadUserDataAndRender();
+}
+
+/* edit modal */
+function openEditModal(item){
+  const modalRoot = $('modalRoot');
+  modalRoot.innerHTML = '';
+  modalRoot.classList.remove('hidden');
+  const backdrop = document.createElement('div');
+  backdrop.className = 'modal-backdrop';
+  const modal = document.createElement('div');
+  modal.className = 'modal';
+  let html = `<h3>Edit ${item.type}</h3><div style="display:flex;gap:8px;flex-direction:column">`;
+  if (item.type === 'Income') {
+    html += `<label>Source</label><input id="m_source" value="${(item.source||'').replaceAll('"','&quot;')}" />`;
+    html += `<label>Amount</label><input id="m_amount" type="number" value="${Number(item.amount||0)}" />`;
+  } else {
+    html += `<label>Description</label><input id="m_desc" value="${(item.description||'').replaceAll('"','&quot;')}" />`;
+    html += `<label>Category</label><input id="m_cat" value="${(item.category||'').replaceAll('"','&quot;')}" />`;
+    html += `<label>Amount</label><input id="m_amount" type="number" value="${Number(item.amount||0)}" />`;
+  }
+  html += `<label>Date</label><input id="m_date" type="datetime-local" value="${new Date(item.date).toISOString().slice(0,16)}" />`;
+  html += `<div style="display:flex;gap:8px;margin-top:10px"><button id="m_save" class="btn btn-primary">Save</button><button id="m_cancel" class="btn">Cancel</button></div></div>`;
+  modal.innerHTML = html;
+  backdrop.appendChild(modal);
+  modalRoot.appendChild(backdrop);
+
+  $('m_cancel').onclick = ()=>{ modalRoot.classList.add('hidden'); modalRoot.innerHTML=''; };
+  $('m_save').onclick = ()=>{
+    const users = getUsers();
+    const udata = users[currentUser].data;
+    if (item.type === 'Income') {
+      const src = $('m_source').value.trim(); const amt = parseFloat($('m_amount').value)||0; const dt = new Date($('m_date').value).toISOString();
+      udata.incomes = udata.incomes.map(i => i.id===item.id ? Object.assign(i,{source:src,amount:amt,date:dt}) : i);
+      CATEGORY_SET.add(src); colorForCategory(src);
+    } else {
+      const desc = $('m_desc').value.trim(); const cat = $('m_cat').value.trim()||'Other'; const amt = parseFloat($('m_amount').value)||0; const dt = new Date($('m_date').value).toISOString();
+      udata.expenses = udata.expenses.map(e => e.id===item.id ? Object.assign(e,{description:desc,category:cat,amount:amt,date:dt}) : e);
+      CATEGORY_SET.add(cat); colorForCategory(cat);
+    }
+    users[currentUser].data = udata;
+    saveUsers(users);
+    modalRoot.classList.add('hidden'); modalRoot.innerHTML='';
+    loadUserDataAndRender();
+  };
+}
+
+/* Open add expense / income modal */
+$('openAddExpense').addEventListener('click', ()=>openAddModal('Expense'));
+$('openAddIncome').addEventListener('click', ()=>openAddModal('Income'));
+
+function openAddModal(type){
+  const modalRoot = $('modalRoot'); modalRoot.innerHTML=''; modalRoot.classList.remove('hidden');
+  const backdrop = document.createElement('div'); backdrop.className='modal-backdrop';
+  const modal = document.createElement('div'); modal.className='modal';
+  let html = `<h3>Add ${type}</h3><div style="display:flex;gap:8px;flex-direction:column">`;
+  if (type === 'Income') {
+    html += `<label>Source</label><input id="a_source" placeholder="Salary / Freelance" />`;
+    html += `<label>Amount</label><input id="a_amount" type="number" placeholder="Amount" />`;
+  } else {
+    html += `<label>Description</label><input id="a_desc" placeholder="e.g. Lunch at cafe" />`;
+    html += `<label>Category</label><input id="a_cat" placeholder="Food / Transport / Bills" />`;
+    html += `<label>Amount</label><input id="a_amount" type="number" placeholder="Amount" />`;
+  }
+  html += `<label>Date</label><input id="a_date" type="datetime-local" value="${new Date().toISOString().slice(0,16)}" />`;
+  html += `<div style="display:flex;gap:8px;margin-top:10px"><button id="a_save" class="btn btn-primary">Add</button><button id="a_cancel" class="btn">Cancel</button></div></div>`;
+  modal.innerHTML = html; backdrop.appendChild(modal); modalRoot.appendChild(backdrop);
+  $('a_cancel').onclick = ()=>{ modalRoot.classList.add('hidden'); modalRoot.innerHTML=''; };
+  $('a_save').onclick = ()=>{
+    const users = getUsers();
+    const udata = users[currentUser].data;
+    const dt = new Date($('a_date').value).toISOString();
+    if (type === 'Income') {
+      const src = $('a_source').value.trim() || 'Income';
+      const amt = parseFloat($('a_amount').value) || 0;
+      const entry = { id: uid(), source: src, amount: amt, date: dt };
+      udata.incomes.push(entry);
+      CATEGORY_SET.add(src); colorForCategory(src);
+    } else {
+      const desc = $('a_desc').value.trim() || 'Expense';
+      const cat = $('a_cat').value.trim() || 'Other';
+      const amt = parseFloat($('a_amount').value) || 0;
+      const entry = { id: uid(), description: desc, amount: amt, category: cat, date: dt };
+      udata.expenses.push(entry);
+      CATEGORY_SET.add(cat); colorForCategory(cat);
+    }
+    users[currentUser].data = udata;
+    saveUsers(users);
+    modalRoot.classList.add('hidden'); modalRoot.innerHTML='';
+    refreshCategoryOptions();
+    loadUserDataAndRender();
+  };
+}
+
+/* Filters & search handlers */
+searchInputEl.addEventListener('input', ()=> loadUserDataAndRender());
+filterCategoryEl.addEventListener('change', ()=> loadUserDataAndRender());
+filterMonthEl.addEventListener('change', ()=> loadUserDataAndRender());
+$('clearFilters').addEventListener('click', ()=>{ searchInputEl.value=''; filterCategoryEl.value=''; filterMonthEl.value=''; loadUserDataAndRender(); });
+sortByEl.addEventListener('change', ()=> loadUserDataAndRender());
+
+/* Admin users search */
+const adminSearchInput = $('adminSearchUsersInput');
+if (adminSearchInput) adminSearchInput.addEventListener('input', ()=> loadAdminUsersList());
+
+/* ========== EXPORTS ========== */
+
+/* CSV export for current user */
+$('exportCSV').addEventListener('click', ()=> {
+  if (!currentUser) return alert('Login first');
+  const users = getUsers();
+  const data = users[currentUser].data || { incomes:[], expenses:[] };
+  const rows = [['type','id','title','category_or_source','amount','date']];
+  (data.incomes||[]).forEach(i=> rows.push(['Income', i.id, i.source, '-', i.amount, i.date]));
+  (data.expenses||[]).forEach(e=> rows.push(['Expense', e.id, e.description, e.category, e.amount, e.date]));
+  downloadCSV(rows, `${currentUser}_transactions.csv`);
+});
+
+$('exportExcel').addEventListener('click', ()=> {
+  if (!currentUser) return alert('Login first');
+  const users = getUsers();
+  const data = users[currentUser].data || { incomes:[], expenses:[] };
+  const ws_data = [['type','id','title','category_or_source','amount','date']];
+  (data.incomes||[]).forEach(i=> ws_data.push(['Income', i.id, i.source, '-', i.amount, i.date]));
+  (data.expenses||[]).forEach(e=> ws_data.push(['Expense', e.id, e.description, e.category, e.amount, e.date]));
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.aoa_to_sheet(ws_data);
+  XLSX.utils.book_append_sheet(wb, ws, 'Transactions');
+  XLSX.writeFile(wb, `${currentUser}_transactions.xlsx`);
+});
+
+/* PDF export */
+$('exportPDF').addEventListener('click', async ()=> {
+  if (!currentUser) return alert('Login first');
+  const users = getUsers();
+  const data = users[currentUser].data || { incomes:[], expenses:[] };
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF();
+  doc.setFontSize(14);
+  doc.text(`Transactions for ${currentUser}`, 14, 18);
+  doc.setFontSize(10);
+  const rows = [];
+  (data.incomes||[]).forEach(i=> rows.push([ 'Income', i.source, currency(i.amount), new Date(i.date).toLocaleString() ]));
+  (data.expenses||[]).forEach(e=> rows.push([ 'Expense', e.description, currency(e.amount), new Date(e.date).toLocaleString() ]));
+  // simple table
+  let startY=26;
+  doc.autoTable = doc.autoTable || null; // guard
+  if (doc.autoTable) {
+    // if autotable plugin is present it would be used; but CDN injected doesn't include autotable,
+    // so we'll fallback to manual rendering:
+  }
+  // manual table render (basic)
+  doc.setFontSize(9);
+  doc.text('Type  |  Title/Desc  |  Amount  |  Date', 14, startY);
+  startY += 6;
+  rows.forEach(r=>{
+    let line = `${r[0]}  |  ${r[1]}  |  ${r[2]}  |  ${r[3]}`;
+    doc.text(line.substring(0,120), 14, startY);
+    startY += 6;
+    if (startY > 275) { doc.addPage(); startY = 20; }
+  });
+  doc.save(`${currentUser}_transactions.pdf`);
+});
+
+/* Admin exports ALL */
+$('exportAllCSV').addEventListener('click', ()=> {
+  if (!currentUser || !isAdmin(currentUser)) return alert('Admin only');
+  const users = getUsers();
+  const rows = [['user','type','id','title','category_or_source','amount','date']];
+  Object.keys(users).forEach(u=>{
+    const data = users[u].data || { incomes:[], expenses:[] };
+    (data.incomes||[]).forEach(i=> rows.push([u,'Income', i.id, i.source, '-', i.amount, i.date]));
+    (data.expenses||[]).forEach(e=> rows.push([u,'Expense', e.id, e.description, e.category, e.amount, e.date]));
+  });
+  downloadCSV(rows, `all_transactions.csv`);
+});
+$('exportAllExcel').addEventListener('click', ()=> {
+  if (!currentUser || !isAdmin(currentUser)) return alert('Admin only');
+  const users = getUsers();
+  const ws_data = [['user','type','id','title','category_or_source','amount','date']];
+  Object.keys(users).forEach(u=>{
+    const data = users[u].data || { incomes:[], expenses:[] };
+    (data.incomes||[]).forEach(i=> ws_data.push([u,'Income', i.id, i.source, '-', i.amount, i.date]));
+    (data.expenses||[]).forEach(e=> ws_data.push([u,'Expense', e.id, e.description, e.category, e.amount, e.date]));
+  });
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.aoa_to_sheet(ws_data);
+  XLSX.utils.book_append_sheet(wb, ws, 'AllTransactions');
+  XLSX.writeFile(wb, `all_transactions.xlsx`);
+});
+
+// Export user emails (admin)
+$('exportEmails').addEventListener('click', ()=>{
+  if (!currentUser || !isAdmin(currentUser)) return alert('Admin only');
+  const users = getUsers();
+  const out = Object.keys(users).map(u => ({ username: u, email: users[u].email || '', isAdmin: !!users[u].isAdmin }));
+  const json = JSON.stringify(out, null, 2);
+  const blob = new Blob([json], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href = url; a.download = 'users_emails.json'; document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+});
+
+/* CSV helper */
+function downloadCSV(rows, filename){
+  const csv = rows.map(r => r.map(c => `"${String(c||'').replace(/"/g,'""')}"`).join(',')).join('\n');
+  const blob = new Blob([csv], { type:'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename; document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+}
+
+/* ========== ADMIN: list users ========= */
+function renderAdminUserList(filter=''){
+  if (!currentUser || !isAdmin(currentUser)) return;
+  const users = getUsers();
+  const container = $('adminUserList'); container.innerHTML='';
+  Object.keys(users).filter(u=>u.includes(filter)).forEach(u=>{
+    const el = document.createElement('div'); el.style.display='flex'; el.style.justifyContent='space-between'; el.style.alignItems='center'; el.style.padding='6px 4px';
+    el.innerHTML = `<div><strong>${u}</strong> <span class="muted">${users[u].isAdmin? ' (admin)': ''} ${users[u].email ? '• ' + users[u].email : ''}</span></div>`;
+    const actions = document.createElement('div');
+    const viewBtn = document.createElement('button'); viewBtn.className='small'; viewBtn.textContent='View'; viewBtn.onclick = ()=>{ openAdminViewUser(u); };
+    const delBtn = document.createElement('button'); delBtn.className='small btn-danger'; delBtn.textContent='Delete'; delBtn.onclick = ()=>{ if (!confirm('Delete user '+u+'?')) return; deleteUser(u); };
+    actions.appendChild(viewBtn); actions.appendChild(delBtn);
+    el.appendChild(actions);
+    container.appendChild(el);
+  });
+}
+
+$('adminSearchUser').addEventListener('input', (e)=> renderAdminUserList(e.target.value.trim()) );
+function renderAdminUserListInitial(){ if (isAdmin(currentUser)) renderAdminUserList(); }
+renderAdminUserListInitial();
+
+function deleteUser(u){
+  const users = getUsers(); if (!users[u]) return;
+  delete users[u];
+  saveUsers(users); renderAdminUserList(); alert('User deleted.');
+}
+
+function openAdminViewUser(u){
+  const modalRoot = $('modalRoot'); modalRoot.innerHTML=''; modalRoot.classList.remove('hidden');
+  const backdrop = document.createElement('div'); backdrop.className='modal-backdrop';
+  const modal = document.createElement('div'); modal.className='modal';
+  const users = getUsers(); const data = users[u].data || { incomes:[], expenses:[] };
+  let html = `<h3>User: ${u}</h3><div class="muted">Incomes & expenses</div><div style="max-height:320px;overflow:auto;margin-top:8px">`;
+  html += '<table class="table"><thead><tr><th>Type</th><th>Title</th><th>Category/Source</th><th>Amount</th><th>Date</th></tr></thead><tbody>';
+  (data.incomes||[]).forEach(i=> html += `<tr><td>Income</td><td>${i.source}</td><td>-</td><td>${currency(i.amount)}</td><td>${new Date(i.date).toLocaleString()}</td></tr>`);
+  (data.expenses||[]).forEach(e=> html += `<tr><td>Expense</td><td>${e.description}</td><td>${e.category}</td><td>${currency(e.amount)}</td><td>${new Date(e.date).toLocaleString()}</td></tr>`);
+  html += '</tbody></table></div><div style="display:flex;gap:8px;margin-top:8px"><button id="closeAdminView" class="btn">Close</button></div>';
+  modal.innerHTML = html; backdrop.appendChild(modal); modalRoot.appendChild(backdrop);
+  $('closeAdminView').onclick = ()=>{ modalRoot.classList.add('hidden'); modalRoot.innerHTML=''; };
+}
+
+/* initial load for logged-in user on page load */
+if (currentUser) updateUIForAuth();
+
+/* admin view refresh when login as admin */
+function renderAdminUserList(){ if (!isAdmin(currentUser)) return; renderAdminUserListInitial(); }
+
+/* refresh periodically to ensure charts & lists update when other tabs change
+   Also sync auth state across tabs: when another tab logs out or logs in, update UI here. */
+window.addEventListener('storage', (e)=>{
+  // read currentUser from storage sources (other tab may use local or session storage)
+  currentUser = localStorage.getItem('currentUser') || sessionStorage.getItem('currentUser') || null;
+  updateUIForAuth();
+  if (currentUser) loadUserDataAndRender();
+});
+
+/* Settings Export Functions */
+function exportUserData() {
+  if (!currentUser) return alert('Login first');
+  const users = getUsers();
+  const data = users[currentUser].data || { incomes:[], expenses:[] };
+  const json = JSON.stringify(data, null, 2);
+  const blob = new Blob([json], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${currentUser}_data.json`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+function downloadAllData() {
+  if (!currentUser) return alert('Login first');
+  const users = getUsers();
+  const data = users[currentUser].data || { incomes:[], expenses:[] };
+  const rows = [['type','id','title','category_or_source','amount','date']];
+  (data.incomes||[]).forEach(i=> rows.push(['Income', i.id, i.source, '-', i.amount, i.date]));
+  (data.expenses||[]).forEach(e=> rows.push(['Expense', e.id, e.description, e.category, e.amount, e.date]));
+  downloadCSV(rows, `${currentUser}_transactions.csv`);
+}
+
+</script>
+</body>
+</html>

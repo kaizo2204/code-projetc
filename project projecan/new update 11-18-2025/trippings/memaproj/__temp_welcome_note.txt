@@ -1,0 +1,1 @@
+Patch applied: welcome-pane CSS added to login.html.
